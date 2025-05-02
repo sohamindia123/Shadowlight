@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shadowlight: Escape from the Void</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #000;
+            overflow: hidden;
+            font-family: monospace;
+            color: #fff;
+            position: relative;
+        }
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        .game-title {
+            font-size: clamp(24px, 5vw, 48px);
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: bold;
+            position: relative;
+            padding: 0 10px;
+            word-wrap: break-word;
+        }
+        #game {
+            width: 100%;
+            height: auto;
+            aspect-ratio: 4/3;
+            margin: auto;
+            position: relative;
+        }
+        .credit-text {
+            font-size: clamp(16px, 4vw, 24px);
+            color: #fff;
+            margin-top: 20px;
+            text-align: center;
+            position: relative;
+            padding: 0 10px;
+        }
+        .credit-heart {
+            color: red;
+            display: inline-block;
+            animation: heartbeat 1.5s infinite;
+        }
+        @keyframes heartbeat {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .mobile-controls {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            padding: 10px;
+            z-index: 1000;
+        }
+        .direction-buttons {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+        }
+        .action-buttons {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+        }
+        .control-button {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(0, 255, 255, 0.3);
+            border: 2px solid #00ffff;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 5px;
+            user-select: none;
+            touch-action: none;
+        }
+        .left-btn, .right-btn {
+            display: inline-block;
+        }
+        .jump-btn {
+            width: 80px;
+            height: 80px;
+        }
+        @media (max-width: 768px) {
+            .game-container {
+                padding: 5px;
+            }
+            .game-title {
+                margin-bottom: 10px;
+            }
+            .credit-text {
+                margin-top: 10px;
+            }
+            .mobile-controls {
+                display: block;
+            }
+        }
+        @media (orientation: landscape) and (max-height: 600px) {
+            .game-title {
+                margin-bottom: 5px;
+            }
+            .credit-text {
+                margin-top: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-title">Shadowlight: Escape from the Void</div>
+        <div id="game"></div>
+        <div class="credit-text">Made By Soham Wagh <span class="credit-heart">❤️</span></div>
+    </div>
+    <div class="mobile-controls">
+        <div class="direction-buttons">
+            <button class="control-button left-btn">←</button>
+            <button class="control-button right-btn">→</button>
+        </div>
+        <div class="action-buttons">
+            <button class="control-button jump-btn">↑</button>
+        </div>
+    </div>
+    <script>
+        const config = {
+            type: Phaser.AUTO,
+            scale: {
+                mode: Phaser.Scale.FIT,
+                parent: 'game',
+                autoCenter: Phaser.Scale.CENTER_BOTH,
+                width: 800,
+                height: 600
+            },
+            backgroundColor: '#000000',
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 300 },
+                    debug: false
+                }
+            },
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            }
+        };
+
+        let gameState = {
+            orbsCollected: 0,
+            totalOrbs: 5,
+            health: 100,
+            isInvulnerable: false,
+            portalCreated: false,
+            currentLevel: 1,
+            maxLevels: 10,
+            isGameOver: false,
+            isPaused: false,
+            isAdminMode: false  // New admin mode flag
+        };
+
+        // Level configurations
+        const levelConfigs = {
+            1: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 } // Base platform
+                ],
+                orbs: [
+                    { x: 200, y: 300 },
+                    { x: 300, y: 300 },
+                    { x: 400, y: 300 },
+                    { x: 500, y: 300 },
+                    { x: 600, y: 300 }
+                ],
+                enemies: [
+                    { x: 600, y: 520, range: { min: 100, max: 700 }, speed: 100 }
+                ]
+            },
+            2: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 200, y: 450, width: 200, height: 20 }, // Left platform
+                    { x: 600, y: 450, width: 200, height: 20 }  // Right platform
+                ],
+                orbs: [
+                    { x: 200, y: 380 },
+                    { x: 600, y: 380 },
+                    { x: 400, y: 300 },
+                    { x: 150, y: 200 },
+                    { x: 650, y: 200 }
+                ],
+                enemies: [
+                    { x: 200, y: 400, range: { min: 100, max: 300 }, speed: 80 },
+                    { x: 600, y: 400, range: { min: 500, max: 700 }, speed: 80 }
+                ]
+            },
+            3: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 400, y: 450, width: 200, height: 20 }, // Middle platform
+                    { x: 200, y: 350, width: 200, height: 20 }, // Left platform
+                    { x: 600, y: 350, width: 200, height: 20 }  // Right platform
+                ],
+                orbs: [
+                    { x: 400, y: 380 },
+                    { x: 200, y: 280 },
+                    { x: 600, y: 280 },
+                    { x: 100, y: 200 },
+                    { x: 700, y: 200 }
+                ],
+                enemies: [
+                    { x: 400, y: 400, range: { min: 300, max: 500 }, speed: 120 },
+                    { x: 200, y: 300, range: { min: 100, max: 300 }, speed: 100 },
+                    { x: 600, y: 300, range: { min: 500, max: 700 }, speed: 100 }
+                ]
+            },
+            4: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 200, y: 480, width: 150, height: 20 }, // Lower left
+                    { x: 600, y: 480, width: 150, height: 20 }, // Lower right
+                    { x: 400, y: 380, width: 150, height: 20 }, // Middle
+                    { x: 200, y: 280, width: 150, height: 20 }, // Upper left
+                    { x: 600, y: 280, width: 150, height: 20 }  // Upper right
+                ],
+                orbs: [
+                    { x: 200, y: 420 },
+                    { x: 600, y: 420 },
+                    { x: 400, y: 320 },
+                    { x: 200, y: 220 },
+                    { x: 600, y: 220 }
+                ],
+                enemies: [
+                    { x: 200, y: 440, range: { min: 150, max: 250 }, speed: 100 },
+                    { x: 600, y: 440, range: { min: 550, max: 650 }, speed: 100 },
+                    { x: 400, y: 340, range: { min: 350, max: 450 }, speed: 120 },
+                    { x: 200, y: 240, range: { min: 150, max: 250 }, speed: 140 }
+                ]
+            },
+            5: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 150, y: 480, width: 150, height: 20 }, // Made platforms wider
+                    { x: 300, y: 400, width: 150, height: 20 },
+                    { x: 500, y: 400, width: 150, height: 20 },
+                    { x: 650, y: 480, width: 150, height: 20 },
+                    { x: 400, y: 300, width: 250, height: 20 }  // Made top platform wider
+                ],
+                orbs: [
+                    { x: 150, y: 420 },
+                    { x: 300, y: 340 },
+                    { x: 500, y: 340 },
+                    { x: 650, y: 420 },
+                    { x: 400, y: 240 }
+                ],
+                enemies: [
+                    { x: 150, y: 440, range: { min: 100, max: 200 }, speed: 60 }, // Reduced speeds
+                    { x: 300, y: 360, range: { min: 250, max: 350 }, speed: 70 },
+                    { x: 500, y: 360, range: { min: 450, max: 550 }, speed: 70 },
+                    { x: 650, y: 440, range: { min: 600, max: 700 }, speed: 60 },
+                    { x: 400, y: 260, range: { min: 300, max: 500 }, speed: 80 }
+                ]
+            },
+            6: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 200, y: 480, width: 120, height: 20 }, // Moving platforms will be added
+                    { x: 400, y: 380, width: 120, height: 20 },
+                    { x: 600, y: 480, width: 120, height: 20 },
+                    { x: 400, y: 280, width: 200, height: 20 }
+                ],
+                orbs: [
+                    { x: 200, y: 420 },
+                    { x: 400, y: 320 },
+                    { x: 600, y: 420 },
+                    { x: 300, y: 220 },
+                    { x: 500, y: 220 }
+                ],
+                enemies: [
+                    { x: 200, y: 440, range: { min: 150, max: 250 }, speed: 80 },
+                    { x: 400, y: 340, range: { min: 350, max: 450 }, speed: 100 },
+                    { x: 600, y: 440, range: { min: 550, max: 650 }, speed: 80 },
+                    { x: 400, y: 240, range: { min: 300, max: 500 }, speed: 120 }
+                ]
+            },
+            7: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 150, y: 500, width: 150, height: 20 }, // Made platforms wider
+                    { x: 650, y: 500, width: 150, height: 20 },
+                    { x: 400, y: 420, width: 250, height: 20 }, // Made middle platform wider
+                    { x: 150, y: 340, width: 150, height: 20 },
+                    { x: 650, y: 340, width: 150, height: 20 },
+                    { x: 400, y: 260, width: 250, height: 20 }  // Made top platform wider
+                ],
+                orbs: [
+                    { x: 150, y: 440 },
+                    { x: 650, y: 440 },
+                    { x: 400, y: 360 },
+                    { x: 150, y: 280 },
+                    { x: 650, y: 280 }
+                ],
+                enemies: [
+                    { x: 150, y: 460, range: { min: 100, max: 200 }, speed: 60 },  // Reduced speeds
+                    { x: 650, y: 460, range: { min: 600, max: 700 }, speed: 60 },
+                    { x: 400, y: 380, range: { min: 300, max: 500 }, speed: 80 },
+                    { x: 150, y: 300, range: { min: 100, max: 200 }, speed: 60 },
+                    { x: 650, y: 300, range: { min: 600, max: 700 }, speed: 60 }
+                ]
+            },
+            8: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 200, y: 480, width: 150, height: 20 }, // Made platforms wider
+                    { x: 400, y: 480, width: 150, height: 20 },
+                    { x: 600, y: 480, width: 150, height: 20 },
+                    { x: 300, y: 380, width: 150, height: 20 },
+                    { x: 500, y: 380, width: 150, height: 20 },
+                    { x: 400, y: 280, width: 200, height: 20 }  // Made top platform wider
+                ],
+                orbs: [
+                    { x: 200, y: 420 },
+                    { x: 400, y: 420 },
+                    { x: 600, y: 420 },
+                    { x: 300, y: 320 },
+                    { x: 500, y: 320 }
+                ],
+                enemies: [
+                    { x: 200, y: 440, range: { min: 150, max: 250 }, speed: 60 },  // Reduced speeds
+                    { x: 400, y: 440, range: { min: 350, max: 450 }, speed: 60 },
+                    { x: 600, y: 440, range: { min: 550, max: 650 }, speed: 60 },
+                    { x: 300, y: 340, range: { min: 250, max: 350 }, speed: 80 },
+                    { x: 500, y: 340, range: { min: 450, max: 550 }, speed: 80 }
+                ]
+            },
+            9: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 200, y: 500, width: 250, height: 20 }, // Made platforms wider
+                    { x: 600, y: 500, width: 250, height: 20 },
+                    { x: 400, y: 420, width: 300, height: 20 }, // Extra wide middle platform
+                    { x: 200, y: 340, width: 250, height: 20 },
+                    { x: 600, y: 340, width: 250, height: 20 }
+                ],
+                orbs: [
+                    { x: 200, y: 440 },
+                    { x: 600, y: 440 },
+                    { x: 400, y: 360 },
+                    { x: 200, y: 280 },
+                    { x: 600, y: 280 }
+                ],
+                enemies: [
+                    { x: 200, y: 460, range: { min: 150, max: 250 }, speed: 50 }, // Reduced speeds
+                    { x: 600, y: 460, range: { min: 550, max: 650 }, speed: 50 },
+                    { x: 400, y: 380, range: { min: 350, max: 450 }, speed: 60 }  // Removed one enemy
+                ]
+            },
+            10: {
+                platforms: [
+                    { x: 400, y: 580, width: 800, height: 40 }, // Base platform
+                    { x: 150, y: 500, width: 200, height: 20 }, // Made platforms wider
+                    { x: 400, y: 450, width: 200, height: 20 },
+                    { x: 650, y: 400, width: 200, height: 20 },
+                    { x: 400, y: 350, width: 200, height: 20 },
+                    { x: 150, y: 300, width: 200, height: 20 }
+                ],
+                orbs: [
+                    { x: 150, y: 440 },
+                    { x: 400, y: 390 },
+                    { x: 650, y: 340 },
+                    { x: 400, y: 290 },
+                    { x: 150, y: 240 }
+                ],
+                enemies: [
+                    { x: 150, y: 460, range: { min: 100, max: 200 }, speed: 50 }, // Reduced speeds
+                    { x: 400, y: 410, range: { min: 350, max: 450 }, speed: 60 },
+                    { x: 650, y: 360, range: { min: 600, max: 700 }, speed: 60 },
+                    { x: 400, y: 310, range: { min: 350, max: 450 }, speed: 70 }  // Removed one enemy
+                ]
+            }
+        };
+
+        function preload() {
+            // Create temporary colored rectangles for testing
+            const playerGraphics = this.add.graphics();
+            playerGraphics.fillStyle(0xffd700);
+            playerGraphics.fillRect(0, 0, 32, 32);
+            playerGraphics.generateTexture('player', 32, 32);
+            playerGraphics.destroy();
+
+            const orbGraphics = this.add.graphics();
+            orbGraphics.fillStyle(0x00ffff);
+            orbGraphics.fillCircle(16, 16, 8);
+            orbGraphics.generateTexture('orb', 32, 32);
+            orbGraphics.destroy();
+
+            const enemyGraphics = this.add.graphics();
+            enemyGraphics.fillStyle(0x800080);
+            enemyGraphics.fillRect(0, 0, 32, 32);
+            enemyGraphics.generateTexture('enemy', 32, 32);
+            enemyGraphics.destroy();
+
+            const portalGraphics = this.add.graphics();
+            portalGraphics.lineStyle(2, 0x00ffff);
+            portalGraphics.strokeCircle(16, 16, 14);
+            portalGraphics.generateTexture('portal', 32, 32);
+            portalGraphics.destroy();
+        }
+
+        let touchControls = {
+            left: false,
+            right: false,
+            jump: false
+        };
+
+        function initMobileControls() {
+            const leftBtn = document.querySelector('.left-btn');
+            const rightBtn = document.querySelector('.right-btn');
+            const jumpBtn = document.querySelector('.jump-btn');
+
+            // Left button
+            leftBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                touchControls.left = true;
+            }, { passive: false });
+            leftBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                touchControls.left = false;
+            }, { passive: false });
+            leftBtn.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                touchControls.left = true;
+            });
+            leftBtn.addEventListener('mouseup', function() {
+                touchControls.left = false;
+            });
+
+            // Right button
+            rightBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                touchControls.right = true;
+            }, { passive: false });
+            rightBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                touchControls.right = false;
+            }, { passive: false });
+            rightBtn.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                touchControls.right = true;
+            });
+            rightBtn.addEventListener('mouseup', function() {
+                touchControls.right = false;
+            });
+
+            // Jump button
+            jumpBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                touchControls.jump = true;
+            }, { passive: false });
+            jumpBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                touchControls.jump = false;
+            }, { passive: false });
+            jumpBtn.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                touchControls.jump = true;
+            });
+            jumpBtn.addEventListener('mouseup', function() {
+                touchControls.jump = false;
+            });
+
+            // Handle touch/mouse leaving the buttons
+            document.addEventListener('touchcancel', function() {
+                touchControls.left = false;
+                touchControls.right = false;
+                touchControls.jump = false;
+            });
+            document.addEventListener('mouseout', function(e) {
+                if (!e.relatedTarget) {
+                    touchControls.left = false;
+                    touchControls.right = false;
+                    touchControls.jump = false;
+                }
+            });
+        }
+
+        function create() {
+            // Reset game state if needed
+            if (gameState.isGameOver) {
+                resetGameState();
+            }
+
+            const currentLevelConfig = levelConfigs[gameState.currentLevel] || levelConfigs[1];
+
+            // Create platforms group
+            this.platforms = this.physics.add.staticGroup();
+            
+            // Create platforms based on level config
+            currentLevelConfig.platforms.forEach(platform => {
+                const p = this.add.rectangle(platform.x, platform.y, platform.width, platform.height, 0xFFFFFF);
+                this.platforms.add(p);
+            });
+            
+            // Create player
+            this.player = this.physics.add.sprite(100, 450, 'player');
+            this.player.setCollideWorldBounds(true);
+            this.player.setBounce(0.2);
+            this.player.setSize(28, 28);
+            
+            // Create orbs based on level config
+            this.orbs = this.physics.add.group();
+            currentLevelConfig.orbs.forEach(orb => {
+                const o = this.orbs.create(orb.x, orb.y, 'orb');
+                o.setScale(0.5);
+                o.setBounce(0.2);
+                o.setCircle(12);
+            });
+            
+            // Create enemies based on level config
+            this.enemies = this.physics.add.group();
+            currentLevelConfig.enemies.forEach(enemy => {
+                const e = this.physics.add.sprite(enemy.x, enemy.y, 'enemy');
+                e.setCollideWorldBounds(true);
+                e.setBounce(0);
+                e.setVelocityX(enemy.speed);
+                e.setSize(28, 28);
+                e.setDepth(1);
+                e.setGravityY(600);
+                e.setFriction(1);
+                e.range = enemy.range;
+                e.speed = enemy.speed;
+                e.setMass(2);
+                this.enemies.add(e);
+            });
+            
+            // Add collisions
+            this.physics.add.collider(this.player, this.platforms);
+            this.physics.add.collider(this.orbs, this.platforms);
+            this.physics.add.collider(this.enemies, this.platforms, function(enemy, platform) {
+                if (enemy.body.touching.down) {
+                    enemy.setY(platform.y - platform.height/2 - enemy.height/2 + 1);
+                    enemy.setVelocityY(0);
+                }
+            });
+            
+            // Add collisions with enemies
+            this.physics.add.collider(this.player, this.enemies, hitEnemy, null, this);
+            
+            // Add overlap for orb collection
+            this.physics.add.overlap(this.player, this.orbs, safeCollectOrb, null, this);
+            
+            // Setup controls
+            this.cursors = this.input.keyboard.createCursorKeys();
+            
+            // Add UI
+            this.levelText = this.add.text(16, 16, `Level - ${gameState.currentLevel}`, { 
+                fontSize: '32px', 
+                fill: '#fff',
+                fontFamily: 'monospace'
+            });
+            
+            this.orbText = this.add.text(600, 16, `Orbs: ${gameState.orbsCollected}/${gameState.totalOrbs}`, { 
+                fontSize: '32px', 
+                fill: '#fff',
+                fontFamily: 'monospace'
+            });
+
+            this.healthText = this.add.text(16, 50, `Health: ${gameState.health}`, {
+                fontSize: '24px',
+                fill: '#fff',
+                fontFamily: 'monospace'
+            });
+
+            // Create portal if all orbs are collected
+            if (gameState.orbsCollected >= gameState.totalOrbs) {
+                createPortal.call(this);
+            }
+
+            // Add pause functionality
+            this.input.keyboard.on('keydown-P', () => {
+                togglePause.call(this);
+            });
+
+            // Add admin mode key
+            this.adminKey = this.input.keyboard.addKey('R');
+            this.adminKey.on('down', function() {
+                gameState.isAdminMode = !gameState.isAdminMode;
+                // Show admin mode status
+                if (this.adminText) {
+                    this.adminText.destroy();
+                }
+                if (gameState.isAdminMode) {
+                    this.adminText = this.add.text(400, 100, 'ADMIN MODE: ON', {
+                        fontSize: '24px',
+                        fill: '#ff0',
+                        fontFamily: 'monospace'
+                    }).setOrigin(0.5);
+                    // Add flashing effect
+                    this.tweens.add({
+                        targets: this.adminText,
+                        alpha: { from: 1, to: 0.5 },
+                        duration: 500,
+                        yoyo: true,
+                        repeat: -1
+                    });
+                }
+            }, this);
+
+            // Initialize mobile controls
+            if (this.sys.game.device.input.touch) {
+                initMobileControls();
+            }
+        }
+
+        function update() {
+            if (gameState.isGameOver || gameState.isPaused) return;
+
+            // Player movement
+            const moveSpeed = 160;
+            
+            // Combined keyboard and touch controls
+            const moveLeft = this.cursors.left.isDown || touchControls.left;
+            const moveRight = this.cursors.right.isDown || touchControls.right;
+            const jump = this.cursors.up.isDown || touchControls.jump;
+
+            if (moveLeft) {
+                this.player.setVelocityX(-moveSpeed);
+                this.player.flipX = true;
+            } else if (moveRight) {
+                this.player.setVelocityX(moveSpeed);
+                this.player.flipX = false;
+            } else {
+                this.player.setVelocityX(0);
+            }
+
+            if (jump && this.player.body.touching.down) {
+                this.player.setVelocityY(-330);
+                touchControls.jump = false; // Reset jump to prevent holding
+            }
+            
+            // Update enemies with improved ground check
+            if (this.enemies) {
+                this.enemies.children.iterate(enemy => {
+                    if (enemy && enemy.active) {
+                        // Update enemy movement with custom bounds
+                        if (enemy.x >= enemy.range.max) {
+                            enemy.setVelocityX(-enemy.speed);
+                            enemy.flipX = true;
+                        } else if (enemy.x <= enemy.range.min) {
+                            enemy.setVelocityX(enemy.speed);
+                            enemy.flipX = false;
+                        }
+
+                        // Ground check and vertical movement
+                        if (enemy.body.touching.down) {
+                            // Ensure enemy stays firmly on platform
+                            enemy.setVelocityY(0);
+                            
+                            // Maintain current horizontal velocity
+                            const currentVelocityX = enemy.flipX ? -enemy.speed : enemy.speed;
+                            enemy.setVelocityX(currentVelocityX);
+                        } else {
+                            // If in air, apply gravity but maintain horizontal movement
+                            enemy.setVelocityY(300);
+                        }
+                    }
+                });
+            }
+
+            // Update portal glow position if it exists
+            if (this.portal && this.portal.active && this.portal.glowEffect) {
+                this.portal.glowEffect.setPosition(this.portal.x, this.portal.y);
+            }
+
+            // Update UI safely
+            if (this.orbText && this.orbText.active) {
+                this.orbText.setText(`Orbs: ${gameState.orbsCollected}/${gameState.totalOrbs}`);
+            }
+            if (this.healthText && this.healthText.active) {
+                this.healthText.setStyle({
+                    fontSize: '24px',
+                    fill: gameState.isAdminMode ? '#ff0' : '#fff',
+                    fontFamily: 'monospace'
+                });
+                this.healthText.setText(gameState.isAdminMode ? 'Health: INFINITE' : `Health: ${gameState.health}`);
+            }
+        }
+
+        function safeCollectOrb(player, orb) {
+            if (!gameState.isGameOver && orb && orb.active) {
+                orb.destroy();
+                gameState.orbsCollected++;
+                
+                // Create a flash effect
+                const flash = this.add.circle(orb.x, orb.y, 20, 0x00ffff, 1);
+                this.tweens.add({
+                    targets: flash,
+                    scale: 2,
+                    alpha: 0,
+                    duration: 300,
+                    onComplete: () => flash.destroy()
+                });
+
+                // Update orb counter text
+                if (this.orbText) {
+                    this.orbText.setText(`Orbs: ${gameState.orbsCollected}/${gameState.totalOrbs}`);
+                }
+
+                // Create portal if all orbs collected
+                if (gameState.orbsCollected >= gameState.totalOrbs && !gameState.portalCreated) {
+                    createPortal.call(this);
+                }
+            }
+        }
+
+        function safeHitEnemy(player, enemy) {
+            try {
+                if (!gameState.isGameOver && enemy && enemy.active) {
+                    hitEnemy.call(this, player, enemy);
+                }
+            } catch (error) {
+                console.error('Error in hitEnemy:', error);
+            }
+        }
+
+        function createPortal() {
+            if (!this.portal || !this.portal.active) {
+                // Create portal on the platform with physics for overlap detection
+                this.portal = this.physics.add.sprite(700, 530, 'portal');
+                this.portal.setScale(0.8);
+                this.portal.setImmovable(true);
+                this.portal.body.setAllowGravity(false);
+                this.portal.setDepth(1);  // Ensure portal is visible above platform
+                
+                // Add overlap for level completion
+                this.physics.add.overlap(this.player, this.portal, safeNextLevel, null, this);
+                
+                // Add visual effects
+                this.tweens.add({
+                    targets: this.portal,
+                    scale: { from: 0.8, to: 1 },
+                    alpha: { from: 0.8, to: 1 },
+                    duration: 1000,
+                    yoyo: true,
+                    repeat: -1
+                });
+
+                // Add a glowing effect
+                const portalGlow = this.add.circle(this.portal.x, this.portal.y, 30, 0x00ffff, 0.3);
+                this.portal.glowEffect = portalGlow;  // Store reference to update position
+
+                this.tweens.add({
+                    targets: portalGlow,
+                    scale: { from: 1, to: 1.5 },
+                    alpha: { from: 0.3, to: 0 },
+                    duration: 1500,
+                    yoyo: true,
+                    repeat: -1
+                });
+
+                // Show portal creation message
+                const portalText = this.add.text(400, 200, 'Portal Opened!', {
+                    fontSize: '32px',
+                    fill: '#00ffff',
+                    fontFamily: 'monospace'
+                }).setOrigin(0.5);
+
+                // Fade out the portal text
+                this.tweens.add({
+                    targets: portalText,
+                    alpha: { from: 1, to: 0 },
+                    duration: 2000,
+                    onComplete: () => portalText.destroy()
+                });
+
+                gameState.portalCreated = true;
+            }
+        }
+
+        function safeNextLevel(player, portal) {
+            if (!gameState.isGameOver && portal && portal.active) {
+                // Add a flash effect before transitioning
+                const flash = this.add.rectangle(400, 300, 800, 600, 0x00ffff);
+                flash.alpha = 0;
+                
+                this.tweens.add({
+                    targets: flash,
+                    alpha: { from: 0, to: 0.3 },
+                    duration: 200,
+                    yoyo: true,
+                    onComplete: () => {
+                        flash.destroy();
+                        nextLevel.call(this);
+                    }
+                });
+            }
+        }
+
+        function nextLevel() {
+            if (gameState.currentLevel < gameState.maxLevels) {
+                gameState.currentLevel++;
+                gameState.orbsCollected = 0;
+                gameState.portalCreated = false;
+                gameState.health = 100;  // Reset health to 100 on each new level
+                this.scene.restart();
+            } else {
+                showVictoryScreen.call(this);
+            }
+        }
+
+        function showVictoryScreen() {
+            gameState.isGameOver = true;
+            this.physics.pause();
+            
+            // Create black overlay
+            const blackScreen = this.add.rectangle(400, 300, 800, 600, 0x000000);
+            blackScreen.setDepth(100);
+            
+            // Create glowing effect
+            const glowCircle = this.add.circle(400, 300, 100, 0x00ffff, 0.2);
+            glowCircle.setDepth(101);
+            
+            // Victory text with special effects
+            const victoryText = this.add.text(400, 250, 'VICTORY!', {
+                fontSize: '72px',
+                fill: '#00ffff',
+                fontFamily: 'monospace',
+                fontStyle: 'bold'
+            }).setOrigin(0.5);
+            victoryText.setDepth(102);
+            
+            const completionText = this.add.text(400, 350, 'You have mastered the void!', {
+                fontSize: '36px',
+                fill: '#ffffff',
+                fontFamily: 'monospace'
+            }).setOrigin(0.5);
+            completionText.setDepth(102);
+            
+            const statsText = this.add.text(400, 420, `Final Level Completed: ${gameState.currentLevel}`, {
+                fontSize: '24px',
+                fill: '#00ff00',
+                fontFamily: 'monospace'
+            }).setOrigin(0.5);
+            statsText.setDepth(102);
+            
+            const playAgainText = this.add.text(400, 490, 'Click anywhere to play again', {
+                fontSize: '24px',
+                fill: '#ffffff',
+                fontFamily: 'monospace'
+            }).setOrigin(0.5);
+            playAgainText.setDepth(102);
+            
+            // Add animations
+            this.tweens.add({
+                targets: glowCircle,
+                scale: { from: 0.5, to: 2 },
+                alpha: { from: 0.2, to: 0 },
+                duration: 2000,
+                repeat: -1
+            });
+            
+            this.tweens.add({
+                targets: victoryText,
+                scale: { from: 0.9, to: 1.1 },
+                duration: 1000,
+                yoyo: true,
+                repeat: -1
+            });
+            
+            // Click to restart
+            this.input.on('pointerdown', () => {
+                resetGameState();
+                this.scene.restart();
+            });
+        }
+
+        function resetGameState() {
+            gameState.health = 100;  // Only reset health when starting a completely new game
+            gameState.orbsCollected = 0;
+            gameState.currentLevel = 1;
+            gameState.portalCreated = false;
+            gameState.isGameOver = false;
+            gameState.isPaused = false;
+        }
+
+        function togglePause() {
+            gameState.isPaused = !gameState.isPaused;
+            if (gameState.isPaused) {
+                this.physics.pause();
+                const pauseText = this.add.text(400, 300, 'PAUSED', {
+                    fontSize: '64px',
+                    fill: '#fff',
+                    fontFamily: 'monospace'
+                }).setOrigin(0.5);
+                this.pauseText = pauseText;
+            } else {
+                this.physics.resume();
+                if (this.pauseText) this.pauseText.destroy();
+            }
+        }
+
+        function hitEnemy(player, enemy) {
+            if (!gameState.isInvulnerable && !gameState.isAdminMode) {  // Check for admin mode
+                gameState.health -= 20;
+                gameState.isInvulnerable = true;
+
+                // Flash the player
+                this.tweens.add({
+                    targets: player,
+                    alpha: 0.5,
+                    duration: 100,
+                    yoyo: true,
+                    repeat: 5,
+                    onComplete: () => {
+                        gameState.isInvulnerable = false;
+                        player.alpha = 1;
+                    }
+                });
+
+                // Knockback effect based on relative positions
+                const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, player.x, player.y);
+                const knockbackForce = 200;
+                
+                // Apply knockback to player
+                player.setVelocity(
+                    Math.cos(angle) * knockbackForce,
+                    Math.sin(angle) * knockbackForce - 100 // Add upward boost
+                );
+
+                // Visual feedback for hit
+                const hitEffect = this.add.circle(player.x, player.y, 20, 0xff0000, 0.5);
+                this.tweens.add({
+                    targets: hitEffect,
+                    scale: 2,
+                    alpha: 0,
+                    duration: 200,
+                    onComplete: () => hitEffect.destroy()
+                });
+
+                if (gameState.health <= 0) {
+                    gameOver.call(this);
+                }
+            }
+        }
+
+        function gameOver() {
+            this.physics.pause();
+            
+            const gameOverText = this.add.text(400, 250, 'Game Over', {
+                fontSize: '64px',
+                fill: '#ff0000',
+                fontFamily: 'monospace'
+            }).setOrigin(0.5);
+
+            const levelText = this.add.text(400, 320, `You reached level ${gameState.currentLevel}`, {
+                fontSize: '32px',
+                fill: '#fff',
+                fontFamily: 'monospace'
+            }).setOrigin(0.5);
+
+            const restartText = this.add.text(400, 390, 'Click to restart', {
+                fontSize: '24px',
+                fill: '#fff',
+                fontFamily: 'monospace'
+            }).setOrigin(0.5);
+
+            this.input.on('pointerdown', () => {
+                gameState.health = 100;
+                gameState.orbsCollected = 0;
+                gameState.currentLevel = 1;
+                gameState.portalCreated = false;
+                this.scene.restart();
+            });
+        }
+
+        const game = new Phaser.Game(config);
+    </script>
+</body>
+</html> 
