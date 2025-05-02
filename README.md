@@ -33,7 +33,7 @@ Navigate through the darkness as a glowing entity, collecting mysterious orbs wh
 
 ## Play the Game
 
-Open `index.html` in a modern web browser to play the game.
+Open [Shadowlight: Escape from the Void](https://sohamindia123.github.io/Shadowlight/) in a modern web browser to play the game.
 
 ## Game Features
 
